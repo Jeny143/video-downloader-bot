@@ -263,25 +263,29 @@ def get_fast_ydl_opts(filename, format_opt, progress_hook=None, is_audio=False):
         'outtmpl': f'{filename}.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        'concurrent_fragment_downloads': 8,
-        'buffersize': 1024 * 1024 * 32,
+        'concurrent_fragment_downloads': 4,
+        'buffersize': 1024 * 1024 * 16,
         'http_chunk_size': 10485760,
         'retries': 10,
         'fragment_retries': 10,
         'socket_timeout': 30,
+        'extractor_retries': 3,
+        
+        # ⭐ Format fallback - Important!
+        'format_sort': ['res:1080', 'ext:mp4:m4a'],
+        'merge_output_format': 'mp4',
     }
     
     if progress_hook:
         opts['progress_hooks'] = [progress_hook]
     
     if is_audio:
+        opts['format'] = 'bestaudio/best'
         opts['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '320',
         }]
-    else:
-        opts['merge_output_format'] = 'mp4'
     
     return opts
 
@@ -515,72 +519,33 @@ async def handle_link(client, message: Message):
     limit_text = "" if is_premium(user_id) else f"\n📊 Remaining: {remaining}/{FREE_DAILY_LIMIT}"
     
     status_msg = await message.reply_text(
-        f"🔍 {platform} detected!{limit_text}\n⏳ Fetching...",
+        f"🔍 {platform} detected!{limit_text}\n⏳ Downloading...",
         parse_mode=enums.ParseMode.HTML
     )
     
     try:
-        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title', 'Video')[:50]
-            duration = info.get('duration') or 0
-            formats = info.get('formats', [])
-        
-        user_data[user_id] = {'url': url, 'title': title, 'platform': platform}
-        
-        quality_options = []
-        seen = set()
-        for f in formats:
-            height = f.get('height')
-            if height and height not in seen:
-                seen.add(height)
-                fsize = f.get('filesize') or 0
-                quality_options.append({'height': height, 'size': fsize})
-        
-        quality_options.sort(key=lambda x: x['height'], reverse=True)
-        
-        keyboard = [[InlineKeyboardButton("🏆 Best Quality", callback_data="dl_best")]]
-        
-        row = []
-        for q in quality_options[:6]:
-            size_text = format_size(q['size']) if q['size'] else ""
-            row.append(InlineKeyboardButton(f"{q['height']}p {size_text}", callback_data=f"dl_q_{q['height']}"))
-            if len(row) == 2:
-                keyboard.append(row)
-                row = []
-        if row:
-            keyboard.append(row)
-        
-        keyboard.append([
-            InlineKeyboardButton("🎵 Audio", callback_data="dl_audio"),
-            InlineKeyboardButton("⚡ Quick", callback_data="dl_quick")
-        ])
-        
-        dur_text = f"{duration//60}:{duration%60:02d}" if duration else "N/A"
-        
-        await status_msg.edit_text(
-            f"{platform}\n━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📹 <b>{title}</b>\n\n⏱ Duration: {dur_text}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n👇 Quality select karo:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=enums.ParseMode.HTML
-        )
-        
-    except Exception as e:
-        await status_msg.edit_text("⏳ Quick download...")
-        await quick_download(client, message, url, platform, status_msg, user_id)
-
-async def quick_download(client, message, url, platform, status_msg, user_id):
-    try:
+        # Direct download - no quality selection (simpler & faster)
         filename = os.path.join(DOWNLOAD_DIR, f"{user_id}_{int(time.time())}")
+        
         progress = DownloadProgress(status_msg)
-        ydl_opts = get_fast_ydl_opts(filename, 'best', progress.hook)
+        
+        ydl_opts = {
+            'format': 'bv*+ba/b',  # Best video+audio, fallback to best
+            'outtmpl': f'{filename}.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+            'merge_output_format': 'mp4',
+            'progress_hooks': [progress.hook],
+            'concurrent_fragment_downloads': 4,
+            'retries': 5,
+        }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             ext = info.get('ext', 'mp4')
-            title = info.get('title', 'Video')
+            title = info.get('title', 'Video')[:50]
         
+        # Find downloaded file
         actual_file = f"{filename}.{ext}"
         if not os.path.exists(actual_file):
             for f in os.listdir(DOWNLOAD_DIR):
@@ -592,11 +557,10 @@ async def quick_download(client, message, url, platform, status_msg, user_id):
             increment_download(user_id)
             await send_file(client, user_id, actual_file, title, platform, status_msg)
         else:
-            await status_msg.edit_text("❌ Download failed!")
+            await status_msg.edit_text("❌ Download failed! Try again.")
             
     except Exception as e:
         await status_msg.edit_text(f"❌ Error: {str(e)[:100]}")
-
 # ═══════════════════════════════════════════
 # CALLBACKS
 # ═══════════════════════════════════════════
@@ -666,6 +630,7 @@ async def handle_callback(client, callback_query):
         platform = user_data[user_id]['platform']
         choice = data.replace("dl_", "")
         
+        
         await message.edit_text("⚡ <b>Downloading...</b>", parse_mode=enums.ParseMode.HTML)
         
         try:
@@ -673,14 +638,14 @@ async def handle_callback(client, callback_query):
             is_audio = choice == "audio"
             
             if choice == "best":
-                format_opt = 'bestvideo+bestaudio/best'
+                format_opt = 'bv*+ba/b'
             elif choice == "audio":
-                format_opt = 'bestaudio/best'
+                format_opt = 'ba/b'
             elif choice == "quick":
-                format_opt = 'best'
+                format_opt = 'b'
             else:
                 height = choice.replace("q_", "")
-                format_opt = f'bestvideo[height<={height}]+bestaudio/best[height<={height}]'
+                format_opt = f'bv*[height<={height}]+ba/b[height<={height}]/b'
             
             progress = DownloadProgress(message)
             ydl_opts = get_fast_ydl_opts(filename, format_opt, progress.hook, is_audio)
