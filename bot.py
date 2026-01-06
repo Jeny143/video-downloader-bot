@@ -18,7 +18,7 @@ API_HASH = os.environ.get("65aac2c7469b04ce852850a1fca587d4", "")
 BOT_TOKEN = os.environ.get("8286746393:AAG7ZKzqb4oPlkKtqJzXJKx1uSIM85YLzIU", "")
 
 # 👑 ADMIN IDS
-ADMINS = list(map(int, os.environ.get("ADMINS", "123456789").split(",")))
+ADMINS = list(map(int, os.environ.get("ADMINS", "8058863815").split(",")))
 
 # 📢 FORCE SUBSCRIBE
 FORCE_SUB_CHANNEL = int(os.environ.get("FORCE_SUB_CHANNEL", "0"))
