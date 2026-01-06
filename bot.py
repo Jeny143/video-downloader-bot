@@ -13,12 +13,15 @@ from pyrogram.errors import UserNotParticipant, ChatAdminRequired
 # ═══════════════════════════════════════════
 # CONFIGURATION - Environment Variables
 # ═══════════════════════════════════════════
-API_ID = int(os.environ.get("API_ID", "39860476"))
-API_HASH = os.environ.get("65aac2c7469b04ce852850a1fca587d4", "")
-BOT_TOKEN = os.environ.get("8286746393:AAG7ZKzqb4oPlkKtqJzXJKx1uSIM85YLzIU", "")
+# ═══════════════════════════════════════════
+# CONFIGURATION
+# ═══════════════════════════════════════════
+API_ID = 39860476  # 👈 Apna API_ID dalo (my.telegram.org se)
+API_HASH = "65aac2c7469b04ce852850a1fca587d4"  # 👈 Apna API_HASH dalo
+BOT_TOKEN = "8286746393:AAG7ZKzqb4oPlkKtqJzXJKx1uSIM85YLzIU"  # 👈 @BotFather se token dalo
 
 # 👑 ADMIN IDS
-ADMINS = list(map(int, os.environ.get("ADMINS", "8058863815").split(",")))
+ADMINS = [8058863815]  # 👈 Apna Telegram ID dalo
 
 # 📢 FORCE SUBSCRIBE
 FORCE_SUB_CHANNEL = int(os.environ.get("FORCE_SUB_CHANNEL", "0"))
